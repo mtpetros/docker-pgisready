@@ -1,0 +1,81 @@
+#!/bin/bash
+
+usage() {
+  echo "Usage: $0 [-u username<string> (required)] [-d dbname<string> (requied)] [-h hostname<string> (default: localhost)] [-p port<number> (default: 5432)] [-t timeout<number> (default: 3)]"
+  exit 1;
+}
+
+while getopts ":u:d:h:p:" opt; do
+  case "${opt}" in
+    u)
+      u=${OPTARG}
+      ;;
+    d)
+      d=${OPTARG}
+      ;;
+    h)
+      h=${OPTARG}
+      ;;
+    p)
+      p=${OPTARG}
+      ;;
+    t)
+      t=${OPTARG}
+      ;;
+    T)
+      r=${OPTARG}
+      ;;
+    *) usage
+      ;;
+  esac
+done
+shift $((OPTIND-1))
+
+if [ -z "${u}" ] || [ -z "${d}" ]
+then
+  usage
+fi
+
+h=${h:-localhost}
+p=${p:-5432}
+t=${t:-3}
+T=${T:-2}
+
+command -v pg_isready
+
+if [ "$?" -eq 1 ]
+then
+  apt-get update
+  apt-get install postgresql-client --assume-yes
+fi
+
+times_attempted=0
+
+poll_pg_server() {
+  pg_isready \
+    -U ${u} \
+    -d ${d} \
+    -h ${h} \
+    -p ${p} \
+    -t ${t}
+  
+  pg_error_code=$?
+  times_attempted=$((times_attempted+1))
+
+  if [ ${times_attempted} -eq ${T} ]
+  then
+    exit ${pg_error_code}
+  else
+    poll_pg_server
+  fi
+}
+
+poll_pg_server
+
+if [ "$?" -eq 0 ]
+then
+  "$*"
+else
+  echo "$d on $h:$p is not available"
+  exit $?
+fi
